@@ -29,16 +29,18 @@ EXPOSE 7228/tcp 7227/tcp
 
 # IMPORTANT: use absolute path so Railway never needs PATH to find it
 ENTRYPOINT ["/usr/local/bin/nexad"]
-CMD ["-printtoconsole",
-     "-datadir=/data",
-     "-listen=1",
-     "-port=7228",
-     "-dnsseed=1",
-     "-upnp=0",
-     "-txindex=0",
-     "-dbcache=600",
-     "-maxconnections=96",
-     "-server=1",
-     "-rpcbind=127.0.0.1",
-     "-rpcallowip=127.0.0.1",
-     "-rpcport=7227"]
+CMD [ \
+  "-printtoconsole", \
+  "-datadir=/data", \
+  "-listen=1", \
+  "-port=7228", \
+  "-dnsseed=1", \
+  "-upnp=0", \
+  "-txindex=0", \
+  "-dbcache=600", \
+  "-maxconnections=96", \
+  "-server=1", \
+  "-rpcbind=127.0.0.1", \
+  "-rpcallowip=127.0.0.1", \
+  "-rpcport=7227" \
+]
