@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Nexa version & URL
-ENV NEXA_VERSION=2.0.0.0
+ENV NEXA_VERSION=2.1.0.0
 ENV NEXA_TARBALL=https://www.bitcoinunlimited.info/nexa/${NEXA_VERSION}/nexa-${NEXA_VERSION}-linux64.tar.gz
 
 # Install nexad and nexa-cli
