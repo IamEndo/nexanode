@@ -1,40 +1,38 @@
 # ---------------------------------------------------------------------------
-# Stage 1: build nexad / nexa-cli from source (unreleased fixes after 2.2.0.0)
+# Stage 1: download the official Nexa release and verify its checksum.
+# The download credentials are used only in this stage, so they never end up
+# in the runtime image.
 # ---------------------------------------------------------------------------
-FROM debian:bookworm AS builder
-
-# Pinned commit on the official dev branch (https://gitlab.com/nexa/nexa).
-# 2026-11-09: includes the INV2 whitelist fix and libevent 2.1.13 bump.
-ENV NEXA_REPO=https://gitlab.com/nexa/nexa.git
-ENV NEXA_COMMIT=df4ff0e5ba34882d53601398eff49710bc2a78a6
-ENV NEXA_HOST=x86_64-pc-linux-gnu
+FROM debian:bookworm-slim AS fetch
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libtool autotools-dev autoconf automake pkg-config \
-    bsdmainutils git curl ca-certificates python3 bison patch \
-    xz-utils bzip2 unzip \
+    ca-certificates curl tar \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /src
-RUN git clone "$NEXA_REPO" nexa \
- && cd nexa \
- && git checkout --detach "$NEXA_COMMIT" \
- && test "$(git rev-parse HEAD)" = "$NEXA_COMMIT"
+# Nexa version, download URL and expected sha256 of the linux64 tarball
+ENV NEXA_VERSION=2.2.0.1
+ENV NEXA_TARBALL=https://nexa.org/api/node/private/download/nexa-${NEXA_VERSION}-linux64.tar.gz
+ENV NEXA_SHA256=f95c2e14e1fa8601a1ecb5afc54c317fe4647019489bf4180ec1840b436db698
 
-WORKDIR /src/nexa
+# Login for the private download area. Set these as Railway service variables
+# (NEXA_DL_USER / NEXA_DL_PASS); they are NOT stored in this repository.
+# Leave them unset once the release is on a public URL.
+ARG NEXA_DL_USER=""
+ARG NEXA_DL_PASS=""
 
-# Official dependency build (static boost, libevent 2.1.13, bdb, zeromq, gmp...)
-RUN JOBS="$(nproc)"; [ "$JOBS" -gt 8 ] && JOBS=8; \
-    make -C depends HOST="$NEXA_HOST" NO_QT=1 NO_RUST=1 -j"$JOBS"
-
-RUN JOBS="$(nproc)"; [ "$JOBS" -gt 8 ] && JOBS=8; \
-    ./autogen.sh \
- && ./configure --prefix="$PWD/depends/$NEXA_HOST" \
-      --with-gui=no --disable-tests --disable-bench --enable-reduce-exports \
- && make -j"$JOBS" \
- && strip src/nexad src/nexa-cli \
- && ./src/nexad -version \
- && ./src/nexa-cli -version
+RUN set -eu; \
+    if [ -n "$NEXA_DL_USER" ]; then \
+      printf 'user = "%s:%s"\n' "$NEXA_DL_USER" "$NEXA_DL_PASS" > /tmp/curl.auth; \
+    else \
+      : > /tmp/curl.auth; \
+    fi; \
+    curl -fL --config /tmp/curl.auth "$NEXA_TARBALL" -o /tmp/nexa.tar.gz; \
+    rm -f /tmp/curl.auth; \
+    echo "${NEXA_SHA256}  /tmp/nexa.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/nexa; \
+    tar -xzf /tmp/nexa.tar.gz -C /opt/nexa --strip-components=1; \
+    /opt/nexa/bin/nexad -version; \
+    /opt/nexa/bin/nexa-cli -version
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime image
@@ -52,8 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl tar \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/nexa/src/nexad /usr/local/bin/nexad
-COPY --from=builder /src/nexa/src/nexa-cli /usr/local/bin/nexa-cli
+COPY --from=fetch /opt/nexa/bin/nexad /usr/local/bin/nexad
+COPY --from=fetch /opt/nexa/bin/nexa-cli /usr/local/bin/nexa-cli
 
 # Sanity checks in the runtime image (fail the build if a binary cannot run)
 RUN /usr/local/bin/nexad -version && /usr/local/bin/nexa-cli -version
